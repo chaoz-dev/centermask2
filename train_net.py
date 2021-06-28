@@ -4,6 +4,8 @@ import logging
 import os
 from collections import OrderedDict
 import torch
+from torch2trt import torch2trt
+
 
 import detectron2.utils.comm as comm
 from detectron2.data import MetadataCatalog
@@ -35,8 +37,6 @@ class Trainer(DefaultTrainer):
     `build_train_loader` method.
     """
 
-
-
     @classmethod
     def build_evaluator(cls, cfg, dataset_name, output_folder=None):
         """
@@ -58,9 +58,11 @@ class Trainer(DefaultTrainer):
                 )
             )
         if evaluator_type in ["coco", "coco_panoptic_seg"]:
-            evaluator_list.append(COCOEvaluator(dataset_name, output_dir=output_folder))
+            evaluator_list.append(COCOEvaluator(
+                dataset_name, output_dir=output_folder))
         if evaluator_type == "coco_panoptic_seg":
-            evaluator_list.append(COCOPanopticEvaluator(dataset_name, output_folder))
+            evaluator_list.append(COCOPanopticEvaluator(
+                dataset_name, output_folder))
         if evaluator_type == "cityscapes_instance":
             assert (
                 torch.cuda.device_count() >= comm.get_rank()
@@ -94,14 +96,14 @@ class Trainer(DefaultTrainer):
         model = GeneralizedRCNNWithTTA(cfg, model)
         evaluators = [
             cls.build_evaluator(
-                cfg, name, output_folder=os.path.join(cfg.OUTPUT_DIR, "inference_TTA")
+                cfg, name, output_folder=os.path.join(
+                    cfg.OUTPUT_DIR, "inference_TTA")
             )
             for name in cfg.DATASETS.TEST
         ]
         res = cls.test(cfg, model, evaluators)
         res = OrderedDict({k + "_TTA": v for k, v in res.items()})
         return res
-
 
 
 def setup(args):
@@ -121,6 +123,12 @@ def main(args):
 
     if args.eval_only:
         model = Trainer.build_model(cfg)
+        model.eval()
+
+        data = torch.randn((3, 512, 512)).cuda()
+        model = torch2trt(model,
+                          [{'file_name': 'NA', 'height': 512, 'width': 512, 'image_id': -1, 'image': data}])
+
         DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(
             cfg.MODEL.WEIGHTS, resume=args.resume
         )
@@ -139,7 +147,8 @@ def main(args):
     trainer.resume_or_load(resume=args.resume)
     if cfg.TEST.AUG.ENABLED:
         trainer.register_hooks(
-            [hooks.EvalHook(0, lambda: trainer.test_with_TTA(cfg, trainer.model))]
+            [hooks.EvalHook(
+                0, lambda: trainer.test_with_TTA(cfg, trainer.model))]
         )
     return trainer.train()
 
