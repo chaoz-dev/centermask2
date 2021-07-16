@@ -29,7 +29,7 @@ MODEL:
     CONV_DIM: 128
 DATASETS:
   TRAIN: ("coco_2017_train",)
-  TEST: ("coco_2017_val",)
+  TEST: ("custom_dataset",)
 SOLVER:
   CHECKPOINT_PERIOD: 10000
   IMS_PER_BATCH: 16

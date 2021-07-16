@@ -1,17 +1,19 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 # Modified by Youngwan Lee (ETRI), 2020. All Rights Reserved.
+import json
 import logging
 import os
 from collections import OrderedDict
 import torch
 
 import detectron2.utils.comm as comm
-from detectron2.data import MetadataCatalog
+from detectron2.data import DatasetCatalog, MetadataCatalog
 from detectron2.engine import DefaultTrainer, default_argument_parser, default_setup, hooks, launch
 from detectron2.evaluation import (
     # CityscapesInstanceEvaluator,
     # CityscapesSemSegEvaluator,
     # COCOEvaluator,
+    DatasetEvaluator,
     COCOPanopticEvaluator,
     DatasetEvaluators,
     LVISEvaluator,
@@ -29,15 +31,28 @@ from detectron2.checkpoint import DetectionCheckpointer
 from centermask.config import get_cfg
 
 
+CUSTOM_DATASET_PATH = '/var/datasets/custom'
+METADATA_FILE = 'metadata.json'
+
+
+def custom_dataset():
+    with open(CUSTOM_DATASET_PATH + '/' + METADATA_FILE) as metadata_file:
+        metadata = json.load(metadata_file)
+
+    return metadata['images']
+
+
+DatasetCatalog.register('custom_dataset', custom_dataset)
+MetadataCatalog.get('custom_dataset').evaluator_type = 'custom'
+
+
 class Trainer(DefaultTrainer):
     """
     This is the same Trainer except that we rewrite the
     `build_train_loader` method.
     """
 
-
-
-    @classmethod
+    @ classmethod
     def build_evaluator(cls, cfg, dataset_name, output_folder=None):
         """
         Create evaluator(s) for a given dataset.
@@ -49,6 +64,8 @@ class Trainer(DefaultTrainer):
             output_folder = os.path.join(cfg.OUTPUT_DIR, "inference")
         evaluator_list = []
         evaluator_type = MetadataCatalog.get(dataset_name).evaluator_type
+        if evaluator_type in ['custom']:
+            evaluator_list.append(DatasetEvaluator())
         if evaluator_type in ["sem_seg", "coco_panoptic_seg"]:
             evaluator_list.append(
                 SemSegEvaluator(
@@ -58,9 +75,11 @@ class Trainer(DefaultTrainer):
                 )
             )
         if evaluator_type in ["coco", "coco_panoptic_seg"]:
-            evaluator_list.append(COCOEvaluator(dataset_name, output_dir=output_folder))
+            evaluator_list.append(COCOEvaluator(
+                dataset_name, output_dir=output_folder))
         if evaluator_type == "coco_panoptic_seg":
-            evaluator_list.append(COCOPanopticEvaluator(dataset_name, output_folder))
+            evaluator_list.append(COCOPanopticEvaluator(
+                dataset_name, output_folder))
         if evaluator_type == "cityscapes_instance":
             assert (
                 torch.cuda.device_count() >= comm.get_rank()
@@ -94,14 +113,14 @@ class Trainer(DefaultTrainer):
         model = GeneralizedRCNNWithTTA(cfg, model)
         evaluators = [
             cls.build_evaluator(
-                cfg, name, output_folder=os.path.join(cfg.OUTPUT_DIR, "inference_TTA")
+                cfg, name, output_folder=os.path.join(
+                    cfg.OUTPUT_DIR, "inference_TTA")
             )
             for name in cfg.DATASETS.TEST
         ]
         res = cls.test(cfg, model, evaluators)
         res = OrderedDict({k + "_TTA": v for k, v in res.items()})
         return res
-
 
 
 def setup(args):
@@ -139,7 +158,8 @@ def main(args):
     trainer.resume_or_load(resume=args.resume)
     if cfg.TEST.AUG.ENABLED:
         trainer.register_hooks(
-            [hooks.EvalHook(0, lambda: trainer.test_with_TTA(cfg, trainer.model))]
+            [hooks.EvalHook(
+                0, lambda: trainer.test_with_TTA(cfg, trainer.model))]
         )
     return trainer.train()
 

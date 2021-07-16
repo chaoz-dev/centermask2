@@ -8,7 +8,7 @@ MODEL:
   FPN:
     IN_FEATURES: ["stage3", "stage4", "stage5"]
   PROPOSAL_GENERATOR:
-    NAME: "FCOS"  
+    NAME: "FCOS"
   FCOS:
     POST_NMS_TOPK_TEST: 50
   # PIXEL_MEAN: [102.9801, 115.9465, 122.7717]
@@ -24,7 +24,7 @@ MODEL:
     POOLER_RESOLUTION: 14
 DATASETS:
   TRAIN: ("coco_2017_train",)
-  TEST: ("coco_2017_val",)
+  TEST: ("custom_dataset",)
 SOLVER:
   CHECKPOINT_PERIOD: 10000
   IMS_PER_BATCH: 16
